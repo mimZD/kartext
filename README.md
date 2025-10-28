@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Kartext - Time Tracking System
 
 A comprehensive time tracking and attendance management system with admin panel.
@@ -38,3 +39,4 @@ See `.env.example` for all required environment variables.
 ## License
 
 MIT
+=======
