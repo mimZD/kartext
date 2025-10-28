@@ -42,11 +42,13 @@ sessionStore.sync();
 const adminRoutes = require('./routes/admin');
 const authRoutes = require('./routes/auth');
 const logRoutes = require('./routes/logs');
-
+const leaveRoutes = require('./routes/leaves');
 // استفاده از routeها
 app.use('/admin', adminRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/logs', logRoutes);
+
+app.use('/api', leaveRoutes);
 
 // route سلامت
 app.get('/health', (req, res) => {
