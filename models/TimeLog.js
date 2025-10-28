@@ -1,7 +1,8 @@
+// models/TimeLog.js
 const { DataTypes } = require('sequelize');
 
 module.exports = (sequelize) => {
-  const LeaveRequest = sequelize.define('LeaveRequest', {
+  const TimeLog = sequelize.define('TimeLog', {
     id: {
       type: DataTypes.INTEGER,
       primaryKey: true,
@@ -11,34 +12,26 @@ module.exports = (sequelize) => {
       type: DataTypes.INTEGER,
       allowNull: false
     },
-    type: {
-      type: DataTypes.ENUM('HOURLY', 'DAILY'),
-      allowNull: false
-    },
-    startDate: {
+    enterTime: {
       type: DataTypes.DATE,
       allowNull: false
     },
-    endDate: {
+    exitTime: {
       type: DataTypes.DATE,
       allowNull: true
     },
-    hours: {
+    deductions: {
+      type: DataTypes.FLOAT,
+      defaultValue: 0
+    },
+    totalTime: {
       type: DataTypes.FLOAT,
       allowNull: true
-    },
-    reason: {
-      type: DataTypes.TEXT,
-      allowNull: true
-    },
-    status: {
-      type: DataTypes.ENUM('PENDING', 'APPROVED', 'REJECTED'),
-      defaultValue: 'PENDING'
     }
   }, {
-    tableName: 'leave_requests',
+    tableName: 'time_logs',
     timestamps: true
   });
 
-  return LeaveRequest;
+  return TimeLog;
 };

@@ -1,7 +1,7 @@
 // routes/leaves.js
 const express = require('express');
 const router = express.Router();
-const { LeaveRequest, User } = require('../models');
+const { LeaveRequest } = require('../models');
 const authenticateToken = require('../middleware/auth');
 
 // ثبت درخواست مرخصی جدید
