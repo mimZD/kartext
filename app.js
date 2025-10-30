@@ -56,7 +56,15 @@ const adminRoutes = require('./routes/admin');
 const authRoutes = require('./routes/auth');
 const logRoutes = require('./routes/logs');
 const leaveRoutes = require('./routes/leaves');
+
+// بعد از خطوط بالا و قبل از app.use، این رو اضافه کنید:
+console.log('🔄 LOADING ROUTES...');
+console.log('📁 Auth routes:', authRoutes ? 'LOADED' : 'FAILED');
+console.log('📁 Leave routes:', leaveRoutes ? 'LOADED' : 'FAILED'); 
+console.log('📁 Log routes:', logRoutes ? 'LOADED' : 'FAILED');
 // استفاده از routeها
+
+
 app.use('/admin', adminRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/logs', logRoutes);
