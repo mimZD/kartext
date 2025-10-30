@@ -4,6 +4,43 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const { User } = require('../models');
 
+
+// در routes/auth.js
+router.post('/reset-db', async (req, res) => {
+  try {
+    console.log('🔄 RESETTING DATABASE...');
+    
+    // حذف همه کاربرها
+    await User.destroy({ where: {} });
+    console.log('🗑️ All users deleted');
+    
+    // ایجاد کاربر تست
+    const testUser = await User.create({
+      username: 'test',
+      password: 'test'
+    });
+    
+    console.log('✅ TEST USER CREATED:', {
+      id: testUser.id,
+      username: testUser.username,
+      password: testUser.password
+    });
+    
+    res.json({
+      success: true,
+      message: 'دیتابیس ریست شد و کاربر تست ایجاد شد',
+      data: testUser
+    });
+    
+  } catch (error) {
+    console.error('❌ RESET ERROR:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // POST /api/login
 router.post('/login', async (req, res) => {
     try {

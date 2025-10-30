@@ -3,31 +3,28 @@ const express = require('express');
 const router = express.Router();
 const { TimeLog, User } = require('../models');
 
-
-// اضافه کردن console.log برای دیباگ
-console.log('TimeLog model:', TimeLog);
-console.log('User model:', User);
-// GET /api/logs - دریافت لاگ‌های کاربر
+// GET /api/logs
 router.get('/', async (req, res) => {
     try {
-        console.log('Fetching logs...');
+        console.log('📋 FETCHING LOGS...');
         
         const logs = await TimeLog.findAll({
             include: [{
                 model: User,
+                as: 'user',
                 attributes: ['username', 'id']
             }],
             order: [['enterTime', 'DESC']]
         });
         
-        console.log(`Found ${logs.length} logs`);
+        console.log(`✅ Found ${logs.length} logs`);
         
         res.json({
             success: true,
             data: logs
         });
     } catch (error) {
-        console.error('Error fetching logs:', error);
+        console.error('❌ Error fetching logs:', error);
         res.status(500).json({
             success: false,
             error: 'خطا در دریافت لاگ‌ها'
@@ -35,15 +32,15 @@ router.get('/', async (req, res) => {
     }
 });
 
-// POST /api/logs - ثبت لاگ جدید
+// POST /api/logs
 router.post('/', async (req, res) => {
     try {
-        console.log('Creating log:', req.body);
+        console.log('➕ CREATING LOG:', req.body);
         
         const { enter_time, deductions, id } = req.body;
         
         const log = await TimeLog.create({
-            userId: 1, // کاربر ثابت برای تست
+            userId: 1,
             enterTime: new Date(parseInt(enter_time)),
             deductions: deductions || 0
         });
@@ -54,7 +51,7 @@ router.post('/', async (req, res) => {
             data: log
         });
     } catch (error) {
-        console.error('Error creating log:', error);
+        console.error('❌ Error creating log:', error);
         res.status(500).json({
             success: false,
             error: 'خطا در ثبت لاگ'

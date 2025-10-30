@@ -1,16 +1,17 @@
 // routes/leaves.js
 const express = require('express');
 const router = express.Router();
-const { LeaveRequest } = require('../models');
-const authenticateToken = require('../middleware/auth');
+const { LeaveRequest, User } = require('../models');
 
-// ثبت درخواست مرخصی جدید
-router.post('/leaves', authenticateToken, async (req, res) => {
+// POST /api/leaves - ثبت درخواست مرخصی
+router.post('/leaves', async (req, res) => {
     try {
+        console.log('📝 CREATING LEAVE REQUEST:', req.body);
+        
         const { type, startDate, endDate, hours, reason } = req.body;
         
         const leaveRequest = await LeaveRequest.create({
-            userId: req.user.userId,
+            userId: 1, // کاربر تست
             type,
             startDate,
             endDate,
@@ -25,7 +26,7 @@ router.post('/leaves', authenticateToken, async (req, res) => {
             data: leaveRequest 
         });
     } catch (error) {
-        console.error('Error creating leave request:', error);
+        console.error('❌ Error creating leave request:', error);
         res.status(500).json({ 
             success: false, 
             error: 'خطا در ثبت درخواست مرخصی' 
@@ -33,53 +34,32 @@ router.post('/leaves', authenticateToken, async (req, res) => {
     }
 });
 
-// دریافت لیست مرخصی‌های کاربر
-router.get('/leaves', authenticateToken, async (req, res) => {
+// GET /api/leaves - دریافت لیست مرخصی‌های کاربر
+router.get('/leaves', async (req, res) => {
     try {
+        console.log('📋 FETCHING LEAVES...');
+        
         const leaves = await LeaveRequest.findAll({
-            where: { userId: req.user.userId },
+            include: [{
+                model: User,
+                as: 'user',
+                attributes: ['username', 'id']
+            }],
+            where: { userId: 1 }, // کاربر تست
             order: [['createdAt', 'DESC']]
         });
+        
+        console.log(`✅ Found ${leaves.length} leave requests`);
         
         res.json({ 
             success: true, 
             data: leaves 
         });
     } catch (error) {
-        console.error('Error fetching leaves:', error);
+        console.error('❌ Error fetching leaves:', error);
         res.status(500).json({ 
             success: false, 
             error: 'خطا در دریافت لیست مرخصی‌ها' 
-        });
-    }
-});
-
-// دریافت اطلاعات یک مرخصی خاص
-router.get('/leaves/:id', authenticateToken, async (req, res) => {
-    try {
-        const leave = await LeaveRequest.findOne({
-            where: { 
-                id: req.params.id,
-                userId: req.user.userId 
-            }
-        });
-        
-        if (!leave) {
-            return res.status(404).json({ 
-                success: false, 
-                error: 'درخواست مرخصی یافت نشد' 
-            });
-        }
-        
-        res.json({ 
-            success: true, 
-            data: leave 
-        });
-    } catch (error) {
-        console.error('Error fetching leave:', error);
-        res.status(500).json({ 
-            success: false, 
-            error: 'خطا در دریافت اطلاعات مرخصی' 
         });
     }
 });
