@@ -1,53 +1,62 @@
+// routes/auth.js
 const express = require('express');
+const router = express.Router();
 const jwt = require('jsonwebtoken');
 const { User } = require('../models');
 
-const router = express.Router();
-
-const JWT_SECRET = process.env.JWT_SECRET || 'kartext-jwt-secret-key-2024-change-in-production';
-
-// POST /api/auth/login
+// POST /api/login - احراز هویت کاربر
 router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
+    
+    console.log('Login attempt:', { username, password });
 
-    if (!username || !password) {
-      return res.status(400).json({ 
-        error: 'Username and password are required' 
-      });
-    }
-
+    // پیدا کردن کاربر
     const user = await User.findOne({ where: { username } });
     
     if (!user) {
-      return res.status(401).json({ 
-        error: 'Invalid credentials' 
+      return res.status(401).json({
+        success: false,
+        error: 'نام کاربری یا رمز عبور اشتباه است'
       });
     }
 
-    const isValidPassword = await user.validatePassword(password);
-    
-    if (!isValidPassword) {
-      return res.status(401).json({ 
-        error: 'Invalid credentials' 
+    // بررسی رمز عبور (ساده - برای تست)
+    // TODO: بعداً با bcrypt جایگزین کنید
+    if (user.password !== password) {
+      return res.status(401).json({
+        success: false,
+        error: 'نام کاربری یا رمز عبور اشتباه است'
       });
     }
 
+    // ایجاد توکن JWT
     const token = jwt.sign(
-      { userId: user.id, username: user.username },
-      JWT_SECRET,
+      { 
+        userId: user.id, 
+        username: user.username 
+      },
+      process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
 
-    // پاسخ مطابق با مدل اندروید
     res.json({
-      token: token
+      success: true,
+      message: 'لاگین موفق',
+      data: {
+        token,
+        user: {
+          id: user.id,
+          username: user.username
+        }
+      }
     });
 
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ 
-      error: 'Server error' 
+    res.status(500).json({
+      success: false,
+      error: 'خطا در سرور'
     });
   }
 });

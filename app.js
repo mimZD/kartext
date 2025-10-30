@@ -7,6 +7,19 @@ const path = require('path');
 
 const app = express();
 
+
+// Add this after: const app = express();
+app.use((req, res, next) => {
+  console.log('📥', new Date().toISOString(), req.method, req.url, req.body);
+  const start = Date.now();
+  
+  res.on('finish', () => {
+    console.log('📤', res.statusCode, `${Date.now() - start}ms`);
+  });
+  
+  next();
+});
+
 // Create Sequelize session store
 const sessionStore = new SequelizeStore({
   db: sequelize,

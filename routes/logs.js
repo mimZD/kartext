@@ -3,6 +3,10 @@ const express = require('express');
 const router = express.Router();
 const { TimeLog, User } = require('../models');
 
+
+// اضافه کردن console.log برای دیباگ
+console.log('TimeLog model:', TimeLog);
+console.log('User model:', User);
 // GET /api/logs - دریافت لاگ‌های کاربر
 router.get('/', async (req, res) => {
     try {
