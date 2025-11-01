@@ -1,12 +1,11 @@
-require('dotenv').config(); // ADD AT TOP
+require('dotenv').config();
 const express = require('express');
-const bcrypt = require('bcrypt');
-const { User, Log } = require('../models');
+const { User, TimeLog, LeaveRequest } = require('../models');
 const { Op } = require('sequelize');
 
 const router = express.Router();
 
-// Get credentials from environment - NO HARCODED FALLBACKS
+// Admin credentials
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 
@@ -45,6 +44,7 @@ router.get('/login', (req, res) => {
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>ورود به پنل مدیریت</title>
             <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+            <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
             <style>
                 body { 
                     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -65,17 +65,22 @@ router.get('/login', (req, res) => {
         </head>
         <body>
             <div class="login-card">
-                <h2 class="text-center mb-4">ورود به پنل مدیریت</h2>
+                <h2 class="text-center mb-4">
+                    <i class="bi bi-shield-lock"></i><br>
+                    ورود به پنل مدیریت
+                </h2>
                 <form action="/admin/login" method="POST">
                     <div class="mb-3">
-                        <label for="username" class="form-label">نام کاربری ادمین</label>
-                        <input type="text" class="form-control" id="username" name="username" required>
+                        <label class="form-label">نام کاربری ادمین</label>
+                        <input type="text" class="form-control" name="username" required>
                     </div>
                     <div class="mb-3">
-                        <label for="password" class="form-label">رمز عبور ادمین</label>
-                        <input type="password" class="form-control" id="password" name="password" required>
+                        <label class="form-label">رمز عبور ادمین</label>
+                        <input type="password" class="form-control" name="password" required>
                     </div>
-                    <button type="submit" class="btn btn-primary w-100">ورود به پنل</button>
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-box-arrow-in-right"></i> ورود به پنل
+                    </button>
                 </form>
             </div>
         </body>
@@ -83,41 +88,69 @@ router.get('/login', (req, res) => {
     `);
 });
 
-// Login POST handler
+
+// Login POST
 router.post('/login', async (req, res) => {
     try {
         const { username, password } = req.body;
         
-        // Check credentials
-        if (username.trim() === ADMIN_CREDENTIALS.username && password.trim() === ADMIN_CREDENTIALS.password) {
+        if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
             req.session.isAdmin = true;
             req.session.username = 'admin';
-
-            req.session.save((err) => {
-                if (err) {
-                    return res.status(500).send('Session error');
-                }
-                res.redirect('/admin');
-            });
-            
+            res.redirect('/admin');
         } else {
-            return res.send(`
-                <script>
-                    alert('نام کاربری یا رمز عبور اشتباه است');
-                    window.location.href = '/admin/login';
-                </script>
-            `);
+            res.send('<script>alert("نام کاربری یا رمز عبور اشتباه است"); location.href="/admin/login";</script>');
         }
-        
     } catch (error) {
-        res.send(`
-            <script>
-                alert('خطا در ورود به سیستم');
-                window.location.href = '/admin/login';
-            </script>
-        `);
+        res.status(500).send('خطا در سرور');
     }
 });
+
+
+// Header template
+function getHeader(currentPath = '/admin') {
+    return `
+        <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+            <div class="container">
+                <a class="navbar-brand" href="/admin">
+                    <i class="bi bi-speedometer2"></i> Kartext Admin
+                </a>
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+                <div class="collapse navbar-collapse" id="navbarNav">
+                    <ul class="navbar-nav">
+                        <li class="nav-item">
+                            <a class="nav-link ${currentPath === '/admin' ? 'active' : ''}" href="/admin">
+                                <i class="bi bi-house"></i> گزارش امروز
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link ${currentPath === '/admin/monthly' ? 'active' : ''}" href="/admin/monthly">
+                                <i class="bi bi-calendar-month"></i> گزارش ماهانه
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link ${currentPath === '/admin/users' ? 'active' : ''}" href="/admin/users">
+                                <i class="bi bi-people"></i> مدیریت کاربران
+                            </a>
+                        </li>
+                    </ul>
+                    <ul class="navbar-nav ms-auto">
+                        <li class="nav-item">
+                            <form action="/admin/logout" method="POST">
+                                <button type="submit" class="btn btn-outline-light btn-sm">
+                                    <i class="bi bi-box-arrow-right"></i> خروج
+                                </button>
+                            </form>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </nav>
+    `;
+}
+
 
 // Logout
 router.post('/logout', (req, res) => {
@@ -161,68 +194,106 @@ function msToMinutes(ms) {
     return Math.floor(ms / (1000 * 60));
 }
 
-// صفحه اصلی ادمین - گزارش ماهانه
-router.get('/', async (req, res) => {
+// صفحه اصلی - گزارش امروز
+router.get('/', requireAuth, async (req, res) => {
     try {
-        const users = await User.findAll({ order: [['id', 'DESC']] });
+        // تاریخ امروز
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+
+        // گرفتن همه کاربران
+        const users = await User.findAll();
         
         let usersHTML = '';
-        for (let user of users) {
-            // محاسبه آمار ماه جاری
-            const startOfMonth = new Date();
-            startOfMonth.setDate(1);
-            startOfMonth.setHours(0, 0, 0, 0);
-            
-            const endOfMonth = new Date();
-            endOfMonth.setMonth(endOfMonth.getMonth() + 1);
-            endOfMonth.setDate(0);
-            endOfMonth.setHours(23, 59, 59, 999);
+        let onlineCount = 0;
 
-            const monthlyLogs = await Log.findAll({
-                where: { 
+        for (let user of users) {
+            // لاگ‌های امروز کاربر
+            const todayLogs = await TimeLog.findAll({
+                where: {
                     userId: user.id,
                     enterTime: {
-                        [Op.between]: [startOfMonth.getTime(), endOfMonth.getTime()]
+                        [Op.between]: [today.getTime(), tomorrow.getTime()]
                     }
-                }
+                },
+                order: [['enterTime', 'DESC']]
             });
-            
-            let monthlyWorkMinutes = 0;
-            let monthlyDeductions = 0;
-            
-            monthlyLogs.forEach(log => {
-                monthlyDeductions += Number(log.deductions);
-                monthlyWorkMinutes += calculateWorkMinutes(
-                    Number(log.enterTime), 
-                    Number(log.exitTime), 
-                    Number(log.deductions)
-                );
+
+            // وضعیت کاربر
+            const lastLog = todayLogs[0];
+            let status = 'آفلاین';
+            let statusClass = 'secondary';
+            let currentSession = null;
+
+            if (lastLog && !lastLog.exitTime) {
+                status = '🟢 آنلاین';
+                statusClass = 'success';
+                onlineCount++;
+                currentSession = lastLog;
+            } else if (todayLogs.length > 0) {
+                status = '⏸️ امروز کار کرده';
+                statusClass = 'info';
+            }
+
+            // محاسبه زمان کار امروز
+            let todayWorkMinutes = 0;
+            todayLogs.forEach(log => {
+                if (log.exitTime) {
+                    const workMs = log.exitTime - log.enterTime;
+                    todayWorkMinutes += Math.floor(workMs / (1000 * 60));
+                }
             });
 
             usersHTML += `
-                <tr>
-                    <td>${user.id}</td>
-                    <td>
-                        <strong>${user.username}</strong>
-                    </td>
-                    <td>${formatTime(monthlyWorkMinutes)}</td>
-                    <td>${msToMinutes(monthlyDeductions)} دقیقه</td>
-                    <td>${monthlyLogs.length} روز</td>
-                    <td>
-                        <a href="/admin/user/${user.id}/month" class="btn btn-info btn-sm">
-                            گزارش ماهانه
-                        </a>
-                        <button class="btn btn-danger btn-sm" onclick="deleteUser(${user.id}, '${user.username}')">
-                            حذف
-                        </button>
-                    </td>
-                </tr>
+                <div class="col-md-6 col-lg-4">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-3">
+                                <h5 class="card-title">
+                                    <i class="bi bi-person-circle"></i> ${user.username}
+                                </h5>
+                                <span class="badge bg-${statusClass}">${status}</span>
+                            </div>
+                            
+                            ${currentSession ? `
+                                <p class="text-success">
+                                    <i class="bi bi-clock"></i> 
+                                    از ${new Date(currentSession.enterTime).toLocaleTimeString('fa-IR')}
+                                </p>
+                            ` : ''}
+                            
+                            <p class="card-text">
+                                <small class="text-muted">
+                                    <i class="bi bi-list-check"></i> 
+                                    ${todayLogs.length} لاگ امروز
+                                </small>
+                                <br>
+                                <small class="text-muted">
+                                    <i class="bi bi-clock-history"></i> 
+                                    ${Math.floor(todayWorkMinutes / 60)}:${(todayWorkMinutes % 60).toString().padStart(2, '0')} زمان کار
+                                </small>
+                            </p>
+                        </div>
+                        <div class="card-footer">
+                            <a href="/admin/user/${user.id}/month" class="btn btn-outline-primary btn-sm">
+                                <i class="bi bi-graph-up"></i> گزارش ماهانه
+                            </a>
+                        </div>
+                    </div>
+                </div>
             `;
         }
 
-        const currentMonth = new Date().toLocaleDateString('fa-IR', { 
-            year: 'numeric', 
-            month: 'long' 
+        // آمار کلی
+        const totalUsers = users.length;
+        const totalLogsToday = await TimeLog.count({
+            where: {
+                enterTime: {
+                    [Op.between]: [today.getTime(), tomorrow.getTime()]
+                }
+            }
         });
 
         res.send(`
@@ -231,31 +302,189 @@ router.get('/', async (req, res) => {
             <head>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>پنل مدیریت کارتکس</title>
+                <title>گزارش امروز - Kartext Admin</title>
                 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+                <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
                 <style>
-                    body { background: #f8f9fa; padding: 20px; }
-                    .header { background: linear-gradient(135deg, #2c3e50, #34495e); color: white; padding: 30px; border-radius: 15px; margin-bottom: 20px; }
-                    .card { background: white; border-radius: 15px; border: none; box-shadow: 0 5px 15px rgba(0,0,0,0.08); margin-bottom: 20px; }
-                    .user-info { background: #e9ecef; padding: 10px 15px; border-radius: 8px; margin-bottom: 15px; }
+                    body { background: #f8f9fa; }
+                    .stats-card { border: none; border-radius: 15px; }
+                    .online-dot { width: 10px; height: 10px; background: #28a745; border-radius: 50%; display: inline-block; }
                 </style>
             </head>
             <body>
-                <div class="container">
-                    <div class="header text-center">
-                        <h1>گزارش ماهانه کارتکس</h1>
-                        <p>ماه: ${currentMonth}</p>
-                        <div class="user-info">
-                            <span>کاربر ادمین: ${req.session.username}</span>
-                            <form action="/admin/logout" method="POST" style="display: inline; margin-right: 15px;">
-                                <button type="submit" class="btn btn-outline-light btn-sm">خروج از پنل</button>
-                            </form>
+                ${getHeader('/admin')}
+                
+                <div class="container mt-4">
+                    <!-- آمار کلی -->
+                    <div class="row mb-4">
+                        <div class="col-md-4">
+                            <div class="card stats-card bg-primary text-white">
+                                <div class="card-body text-center">
+                                    <h3>${totalUsers}</h3>
+                                    <p>کل کاربران</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card stats-card bg-success text-white">
+                                <div class="card-body text-center">
+                                    <h3>${onlineCount}</h3>
+                                    <p>کاربران آنلاین</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card stats-card bg-info text-white">
+                                <div class="card-body text-center">
+                                    <h3>${totalLogsToday}</h3>
+                                    <p>لاگ‌های امروز</p>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
+                    <!-- لیست کاربران -->
                     <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="bi bi-people-fill"></i>
+                                وضعیت کاربران - امروز (${new Date().toLocaleDateString('fa-IR')})
+                            </h5>
+                        </div>
                         <div class="card-body">
-                            <h5>ایجاد کاربر جدید</h5>
+                            <div class="row">
+                                ${usersHTML || '<div class="col-12 text-center text-muted py-4">هیچ کاربری یافت نشد</div>'}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+            </body>
+            </html>
+        `);
+
+    } catch (error) {
+        console.error('Error in admin dashboard:', error);
+        res.status(500).send('خطا در بارگذاری اطلاعات: ' + error.message);
+    }
+});
+
+// گزارش ماهانه
+router.get('/monthly', requireAuth, async (req, res) => {
+    try {
+        const months = [];
+        const currentDate = new Date();
+        
+        // تولید لیست ۱۲ ماه گذشته
+        for (let i = 0; i < 12; i++) {
+            const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
+            months.push({
+                year: date.getFullYear(),
+                month: date.getMonth() + 1,
+                name: date.toLocaleDateString('fa-IR', { year: 'numeric', month: 'long' })
+            });
+        }
+
+        const monthsHTML = months.map(m => `
+            <div class="col-md-6 col-lg-4">
+                <div class="card h-100">
+                    <div class="card-body text-center">
+                        <h5>${m.name}</h5>
+                        <a href="/admin/monthly/${m.year}/${m.month}" class="btn btn-primary mt-2">
+                            <i class="bi bi-graph-up"></i> مشاهده گزارش
+                        </a>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+
+        res.send(`
+            <!DOCTYPE html>
+            <html dir="rtl" lang="fa">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>گزارش ماهانه - Kartext Admin</title>
+                <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+                <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
+            </head>
+            <body>
+                ${getHeader('/admin/monthly')}
+                
+                <div class="container mt-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <h4 class="card-title mb-0">
+                                <i class="bi bi-calendar-month"></i>
+                                انتخاب ماه برای مشاهده گزارش
+                            </h4>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                ${monthsHTML}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </body>
+            </html>
+        `);
+
+    } catch (error) {
+        res.status(500).send('خطا: ' + error.message);
+    }
+});
+
+// مدیریت کاربران
+router.get('/users', requireAuth, async (req, res) => {
+    try {
+        const users = await User.findAll({ order: [['id', 'DESC']] });
+
+        const usersHTML = users.map(user => `
+            <tr>
+                <td>${user.id}</td>
+                <td>
+                    <i class="bi bi-person-circle"></i>
+                    <strong>${user.username}</strong>
+                </td>
+                <td>${new Date(user.createdAt).toLocaleDateString('fa-IR')}</td>
+                <td>
+                    <div class="btn-group btn-group-sm">
+                        <a href="/admin/user/${user.id}/month" class="btn btn-outline-info">
+                            <i class="bi bi-graph-up"></i> گزارش
+                        </a>
+                        <button class="btn btn-outline-danger" onclick="deleteUser(${user.id}, '${user.username}')">
+                            <i class="bi bi-trash"></i> حذف
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `).join('');
+
+        res.send(`
+            <!DOCTYPE html>
+            <html dir="rtl" lang="fa">
+            <head>
+                <meta charset="UTF-8">""
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>مدیریت کاربران - Kartext Admin</title>
+                <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+                <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
+            </head>
+            <body>
+                ${getHeader('/admin/users')}
+                
+                <div class="container mt-4">
+                    <!-- فرم ایجاد کاربر -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="bi bi-person-plus"></i>
+                                ایجاد کاربر جدید
+                            </h5>
+                        </div>
+                        <div class="card-body">
                             <form action="/admin/create-user" method="POST" class="row g-3">
                                 <div class="col-md-4">
                                     <input type="text" name="username" class="form-control" placeholder="نام کاربری" required>
@@ -264,24 +493,30 @@ router.get('/', async (req, res) => {
                                     <input type="password" name="password" class="form-control" placeholder="رمز عبور" required>
                                 </div>
                                 <div class="col-md-4">
-                                    <button type="submit" class="btn btn-primary w-100">ایجاد کاربر</button>
+                                    <button type="submit" class="btn btn-primary w-100">
+                                        <i class="bi bi-plus-circle"></i> ایجاد کاربر
+                                    </button>
                                 </div>
                             </form>
                         </div>
                     </div>
 
+                    <!-- لیست کاربران -->
                     <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="bi bi-people"></i>
+                                لیست کاربران
+                            </h5>
+                        </div>
                         <div class="card-body">
-                            <h5>گزارش ماهانه کاربران</h5>
                             <div class="table-responsive">
                                 <table class="table table-striped">
                                     <thead>
                                         <tr>
                                             <th>ID</th>
                                             <th>نام کاربری</th>
-                                            <th>زمان مفید ماه</th>
-                                            <th>کسورات ماه</th>
-                                            <th>روزهای کاری</th>
+                                            <th>تاریخ ایجاد</th>
                                             <th>عملیات</th>
                                         </tr>
                                     </thead>
@@ -317,147 +552,9 @@ router.get('/', async (req, res) => {
             </body>
             </html>
         `);
+
     } catch (error) {
-        res.status(500).send('خطا در بارگذاری اطلاعات: ' + error.message);
-    }
-});
-
-// صفحه گزارش ماهانه کاربر
-router.get('/user/:id/month', async (req, res) => {
-    try {
-        const userId = req.params.id;
-        const user = await User.findByPk(userId);
-        
-        if (!user) {
-            return res.status(404).send('کاربر یافت نشد');
-        }
-
-        // پارامترهای ماه
-        const year = req.query.year || new Date().getFullYear();
-        const month = req.query.month || new Date().getMonth() + 1;
-        
-        const startOfMonth = new Date(year, month - 1, 1);
-        const endOfMonth = new Date(year, month, 0);
-        endOfMonth.setHours(23, 59, 59, 999);
-
-        // گروه‌بندی لاگ‌ها بر اساس روز
-        const logs = await Log.findAll({
-            where: { 
-                userId: userId,
-                enterTime: {
-                    [Op.between]: [startOfMonth.getTime(), endOfMonth.getTime()]
-                }
-            },
-            order: [['enterTime', 'DESC']]
-        });
-
-        // گروه‌بندی بر اساس روز
-        const dailyStats = {};
-        logs.forEach(log => {
-            const enterDate = new Date(Number(log.enterTime));
-            const dateKey = enterDate.toLocaleDateString('fa-IR');
-            const dayKey = enterDate.getDate();
-            
-            if (!dailyStats[dayKey]) {
-                dailyStats[dayKey] = {
-                    date: enterDate,
-                    dateString: dateKey,
-                    logs: [],
-                    totalWorkMinutes: 0,
-                    totalDeductions: 0,
-                    completedLogs: 0
-                };
-            }
-            
-            const workMinutes = calculateWorkMinutes(
-                Number(log.enterTime), 
-                Number(log.exitTime), 
-                Number(log.deductions)
-            );
-            
-            dailyStats[dayKey].logs.push(log);
-            dailyStats[dayKey].totalWorkMinutes += workMinutes;
-            dailyStats[dayKey].totalDeductions += Number(log.deductions);
-            if (log.exitTime) dailyStats[dayKey].completedLogs++;
-        });
-
-        // تبدیل به آرایه و مرتب‌سازی
-        const dailyArray = Object.values(dailyStats).sort((a, b) => b.date - a.date);
-
-        let daysHTML = '';
-        dailyArray.forEach(day => {
-            daysHTML += `
-                <tr>
-                    <td>${day.dateString}</td>
-                    <td>${day.logs.length}</td>
-                    <td>${formatTime(day.totalWorkMinutes)}</td>
-                    <td>${msToMinutes(day.totalDeductions)} دقیقه</td>
-                    <td>${day.completedLogs}</td>
-                    <td>
-                        <a href="/admin/user/${userId}/day/${day.date.getFullYear()}/${day.date.getMonth() + 1}/${day.date.getDate()}" 
-                           class="btn btn-info btn-sm">
-                            مشاهده جزییات
-                        </a>
-                    </td>
-                </tr>
-            `;
-        });
-
-        const monthName = startOfMonth.toLocaleDateString('fa-IR', { 
-            year: 'numeric', 
-            month: 'long' 
-        });
-
-        res.send(`
-            <!DOCTYPE html>
-            <html dir="rtl" lang="fa">
-            <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>گزارش ماهانه - ${user.username}</title>
-                <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-                <style>
-                    body { background: #f8f9fa; padding: 20px; }
-                    .user-header { background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
-                    .card { background: white; border-radius: 15px; border: none; box-shadow: 0 5px 15px rgba(0,0,0,0.08); margin-bottom: 20px; }
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <div class="user-header">
-                        <h2>گزارش ماهانه: ${user.username}</h2>
-                        <p class="mb-0">ماه: ${monthName}</p>
-                        <a href="/admin" class="btn btn-light mt-2">بازگشت به صفحه اصلی</a>
-                    </div>
-
-                    <div class="card">
-                        <div class="card-body">
-                            <h5>گزارش روزهای ماه</h5>
-                            <div class="table-responsive">
-                                <table class="table table-striped">
-                                    <thead>
-                                        <tr>
-                                            <th>تاریخ</th>
-                                            <th>تعداد لاگ</th>
-                                            <th>زمان مفید</th>
-                                            <th>کسورات</th>
-                                            <th>ورود/خروج کامل</th>
-                                            <th>جزییات</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        ${daysHTML}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </body>
-            </html>
-        `);
-    } catch (error) {
-        res.status(500).send('خطا در بارگذاری گزارش ماهانه: ' + error.message);
+        res.status(500).send('خطا: ' + error.message);
     }
 });
 
@@ -639,4 +736,89 @@ router.delete('/delete-user/:id', async (req, res) => {
     }
 });
 
+
+// GET /admin/leaves - نمایش لیست مرخصی‌ها
+router.get('/leaves', async (req, res) => {
+    try {
+        if (!req.session.user || !req.session.user.isAdmin) {
+            return res.redirect('/admin/login');
+        }
+
+        const leaves = await LeaveRequest.findAll({
+            include: [{
+                model: User,
+                attributes: ['username', 'id']
+            }],
+            order: [['createdAt', 'DESC']]
+        });
+
+        res.render('admin/leaves', {
+            user: req.session.user,
+            leaves: leaves,
+            currentPath: '/admin/leaves'
+        });
+
+    } catch (error) {
+        console.error('Error fetching leaves:', error);
+        res.status(500).render('admin/error', {
+            error: 'خطا در بارگذاری لیست مرخصی‌ها'
+        });
+    }
+});
+
+// POST /admin/leaves/:id/approve - تایید مرخصی
+router.post('/leaves/:id/approve', async (req, res) => {
+    try {
+        if (!req.session.user || !req.session.user.isAdmin) {
+            return res.redirect('/admin/login');
+        }
+
+        const { id } = req.params;
+        const leave = await LeaveRequest.findByPk(id);
+        
+        if (!leave) {
+            return res.status(404).json({ error: 'درخواست مرخصی پیدا نشد' });
+        }
+        
+        leave.status = 'APPROVED';
+        await leave.save();
+        
+        res.json({
+            success: true,
+            message: 'درخواست مرخصی تایید شد'
+        });
+        
+    } catch (error) {
+        console.error('Error approving leave:', error);
+        res.status(500).json({ error: 'خطا در تایید مرخصی' });
+    }
+});
+
+// POST /admin/leaves/:id/reject - رد مرخصی
+router.post('/leaves/:id/reject', async (req, res) => {
+    try {
+        if (!req.session.user || !req.session.user.isAdmin) {
+            return res.redirect('/admin/login');
+        }
+
+        const { id } = req.params;
+        const leave = await LeaveRequest.findByPk(id);
+        
+        if (!leave) {
+            return res.status(404).json({ error: 'درخواست مرخصی پیدا نشد' });
+        }
+        
+        leave.status = 'REJECTED';
+        await leave.save();
+        
+        res.json({
+            success: true,
+            message: 'درخواست مرخصی رد شد'
+        });
+        
+    } catch (error) {
+        console.error('Error rejecting leave:', error);
+        res.status(500).json({ error: 'خطا در رد مرخصی' });
+    }
+});
 module.exports = router;
